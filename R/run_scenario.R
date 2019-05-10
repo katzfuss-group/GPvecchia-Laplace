@@ -1,6 +1,3 @@
-#setwd("/home/grad/dzilber/Documents/dz_VL_simulation/")
-#source("VL_method_cpp.R")
-
 
 ##########################################################################
 ##################### Compare models: computation time  ########################
@@ -9,83 +6,115 @@
 
 dposterior = function(y, pred){
   mu = pred$mean
-  W = pred$W
+  W= pred$W
+  # VL calculates V, Laplace calculates W
+  if("V" %in% names(pred)){
+    det_term = sum(log(diag(pred$V)))
+  }else{
+    V=t(chol(forceSymmetric(pred$W)))
+    #V = t(chol((W + t(W))/2))
+    det_term = sum(log(diag(V)))
+    #det_term =log(det(W))/2
+  }
   quad_term = -t(y-mu) %*% W %*% (y-mu)/2
-  det_term = sum(log(diag(t(chol(W)))))# log(det(W))/2
   pi_term = -length(y)/2*log(2*pi)
-  #print(paste("[Quad", quad_term, "] [Det", det_term,"]"))
   # value is of class "dgeMatrix"
   return((quad_term+det_term+pi_term)[1,1])
 }
 
 
-create_scenario_tester = function(log_file_name=NA){
-  header = c("Mod", "Domain", "Dimen", "Sample", "C_Smoothness", "C_Range","Neighbors","Seed_off", 
-             "MSE_Laplace", "MSE_VL",  "MSE_LowRank", "LS_Laplace", "LS_VL",  "LS_LowRank", 
-             "Time_Laplace", "Time_VL",  "Time_LowRank", 
-             "Iter_Laplace", "Iter_VL",  "Iter_LowRank")
-  
+create_scenario_tester = function(header, log_file_name){
+
   num_cols= length(header)
-  
+
+  # Write to file rather than memory, avoid losing data with crash
   filename = log_file_name
-  if (is.na(log_file_name)) filename= paste("results_",as.Date(Sys.time()),".csv", sep="")
-  
-  # Write to file rather than memory, avoid interruption issues
-  write(header, file =filename, ncolumns=num_cols, sep=",")
-  
-  run_scenario = function(seed_r, domn, dimen, samp_size, neighbors, smth, mod_type, rnge, show_output = FALSE){
-    
-    covparms=c(1, rnge, smth)
-    covfun <- function(locs) Matern(rdist(locs), range = rnge, smoothness = smth)
-    
-    if(mod_type==1)
-      ls=gauss_sample(samp_size,covfun, seed = samp_size+seed_r+mod_type , dom = domn, dimen=dimen)
-    if(mod_type==2)
-      ls=logistic_sample(samp_size,covfun, seed = samp_size+mod_type+seed_r, dom = domn, dimen=dimen)
-    if(mod_type==3)
-      ls=pois_sample(samp_size,covfun, seed = samp_size+seed_r+mod_type, dom = domn, dimen = dimen)
-    if(mod_type==4)
-      ls=gamma_sample(samp_size,covfun, seed = samp_size+seed_r+mod_type , dom = domn, dimen=dimen)
-    
-    
-    
-    t_start = Sys.time()
-    pred_y_lv = estimate_laplace_vec_cpp(ls,covparms, m=neighbors)
-    t_start_2 = Sys.time()
-    pred_y_lr =  estimate_laplace_vec_cpp(ls, covparms, m=neighbors, use_low_rank = TRUE)
-    t_start_3 = Sys.time()
-    pred_y_l= estimate_laplace(ls, C =covfun(ls$locs))
-    t_fin = Sys.time()
-    
-    LV_time = as.double(difftime(t_start_2, t_start, units = "mins"))
-    LR_time = as.double(difftime(t_start_3, t_start_2, units = "mins"))
-    Lap_time = as.double(difftime(t_fin, t_start_3, units = "mins"))
-    sim_times = c(Lap_time, LV_time, LR_time)
-    #print(sim_times)
-    lv_score = dposterior(ls$y, pred_y_lv)
-    lr_score = dposterior(ls$y, pred_y_lr)
-    laplace_score = dposterior(ls$y, pred_y_l)
-    log_score_results <-c(laplace_score, lv_score, lr_score)
-    
-    mse  =  c(mean((ls$y-pred_y_l$mean)^2), mean((ls$y-pred_y_lv$mean)^2), mean((ls$y-pred_y_lr$mean)^2))
-    NR_iters = c(pred_y_l$iter, pred_y_lv$iter, pred_y_lr$iter)
-    
-    
-    results_i = c(mod_type, domn, dimen, samp_size, smth, rnge, neighbors, seed_r, mse, log_score_results, sim_times, NR_iters)
-    
-    if (show_output){
-      mod_name = ifelse(mod_type==1, "logistic", ifelse(mod_type==2, "Poisson", ifelse(mod_type==3, "Gaussian", "Gamma")))
-      results_list = list(mod_name, domn, dimen, samp_size, smth, rnge, neighbors, seed_r, mse, log_score_results, sim_times,NR_iters)
-      output_data = c("model", "domain", "dimen", "sample", "smth", "range", "neighbors", "seed_r", "mse", "log_score_results", "sim_times", "NR_iter")
-      named_output = setNames( results_list, c(output_data))
-      message(str(named_output))
-    }  
-    
-    write(results_i, file = filename, ncolumns=num_cols, append=TRUE, sep=",")
+  write_to_file = !is.na(log_file_name)
+  if (write_to_file) write(header, file =filename, ncolumns=num_cols, sep=",")
+  #filename= paste("results_",as.Date(Sys.time()),".csv", sep="")
+
+
+  run_scenario = function(seed_r, domn, dimen, samp_size, neighbors, smth, mod_type, rnge, show_output = FALSE, run_algo= TRUE){
+    max_tries =  ifelse (seed_r<0, 3, 1) # in case of error, try different seed or exit without writing
+    failed_convergence = FALSE
+    for(i in 1:max_tries) {
+
+      covparms=c(1, rnge, smth)
+      covfun <- function(locs) Matern(rdist(locs), range = rnge, smoothness = smth)
+      covmodel <- RMmatern(smth,var = 1,scale = rnge)
+
+      if(seed_r<0 || i>1) seed_r = sample(1e6,1)
+
+      if(mod_type==1)
+        ls=gauss_sample(samp_size,covmodel, seed = seed_r , dom = domn, dimen=dimen)
+      if(mod_type==2)
+        ls=logistic_sample(samp_size,covmodel, seed = seed_r, dom = domn, dimen=dimen)
+      if(mod_type==3)
+        ls=pois_sample(samp_size,covmodel, seed = seed_r, dom = domn, dimen = dimen)
+      if(mod_type==4)
+        ls=gamma_sample(samp_size,covmodel, seed = seed_r , dom = domn, dimen=dimen)
+
+      vecchia.approx=vecchia_specify(ls$locs, neighbors)
+      vecchia.approx_z=vecchia_specify(ls$locs, neighbors, cond.yz = "zy")
+      vecchia.approx_LR=vecchia_specify(ls$locs, neighbors, conditioning="firstm")
+
+      default_out = list("W"=1, "mean" = 0, "runtime" = -1, "iter"=-1, "cnvgd" = TRUE)
+      pred_y_lv =  default_out # SGVecchia Laplace
+      pred_y_lv_z =  default_out # Observed Vecchia Laplace
+      pred_y_l = default_out # Laplace
+      pred_y_lr = default_out # low rank Laplace
+
+      pred_y_lv = calculate_posterior_VL(ls$z, vecchia.approx, ls$type, covparms, return_all = TRUE)
+      pred_y_lr =  calculate_posterior_VL(ls$z, vecchia.approx_LR, ls$type, covparms,  return_all = TRUE)
+      pred_y_lv_z =  calculate_posterior_VL(ls$z, vecchia.approx_z, ls$type, covparms,  return_all = TRUE)
+      if (run_algo) pred_y_l= calculate_posterior_laplace(ls$z, ls$type, C =covfun(ls$locs), return_all = TRUE)
+
+      failed_convergence  = any(!c(pred_y_lv$cnvgd, pred_y_l$cnvgd, pred_y_lv_z$cnvgd, pred_y_lr$cnvgd))
+      if(failed_convergence) {
+        message("Failed convergence, check seed")
+        if (show_output){
+          mod_name = ifelse(mod_type==2, "Logistic", ifelse(mod_type==3, "Poisson", ifelse(mod_type==1, "Gaussian", "Gamma")))
+          results_list = list(mod_name, domn, dimen, samp_size, smth, rnge, neighbors, seed_r)
+          output_data = c("model", "domain", "dimen", "sample", "smth", "range", "neighbors", "seed_r")
+          named_output = setNames( results_list, c(output_data))
+          message(str(named_output))
+        }
+        next # try again or exit without writing result
+      }
+      sim_times = c(pred_y_l$runtime, pred_y_lv$runtime, pred_y_lv_z$runtime, pred_y_lr$runtime)
+
+      #print(sim_times)
+      lv_score = 0#dposterior(ls$y, pred_y_lv)
+      lv_z_score = 0#dposterior(ls$y, pred_y_lv_z)
+      lr_score = 0#dposterior(ls$y, pred_y_lr)
+      laplace_score = 0#dposterior(ls$y, pred_y_l)
+      log_score_results <-c(laplace_score, lv_score, lv_z_score, lr_score)
+
+      mse  =  c(mean((ls$y-pred_y_l$mean)^2), mean((ls$y-pred_y_lv$mean)^2),
+                mean((ls$y-pred_y_lv_z$mean)^2), mean((ls$y-pred_y_lr$mean)^2))
+      NR_iters = c(pred_y_l$iter, pred_y_lv$iter, pred_y_lv_z$iter, pred_y_lr$iter)
+
+
+
+
+      results_i = c(mod_type, domn, dimen, samp_size, smth, rnge, neighbors, seed_r, mse, log_score_results, sim_times, NR_iters)
+
+      if (show_output){
+        mod_name = ifelse(mod_type==2, "Logistic", ifelse(mod_type==3, "Poisson", ifelse(mod_type==1, "Gaussian", "Gamma")))
+        results_list = list(mod_name, domn, dimen, samp_size, smth, rnge, neighbors, seed_r, mse, log_score_results, sim_times,NR_iters)
+        output_data = c("model", "domain", "dimen", "sample", "smth", "range", "neighbors", "seed_r", "mse", "log_score_results", "sim_times", "NR_iter")
+        named_output = setNames( results_list, c(output_data))
+        message(str(named_output))
+      }
+
+
+      if(write_to_file) write(results_i, file = filename, ncolumns=num_cols, append=TRUE, sep=",")
+      # successful iteration,return will break loop
+      return(results_i) # for secondary output; avoids issues with buffered writing?
+    }
   }
   return(run_scenario)
 }
-
 
 
 # Sample Code:
