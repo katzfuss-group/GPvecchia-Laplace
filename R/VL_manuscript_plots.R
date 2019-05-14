@@ -17,14 +17,14 @@ create_mod_factor = function(agg_df){
 
 
 ####### MSE Plot #######
-create_MSE_plot=function(data_df, dim, colScale, shapeScale, exclude_gauss=FALSE){
+create_MSE_plot=function(data_df, dim, colScale, shapeScale, exclude_gauss=FALSE, exclude_iw = FALSE){
 
   # aggregate data
   agg_mse_2d = aggregate( cbind(MSE_Laplace, MSE_VL, MSE_VL_z, MSE_LowRank) ~ Mod+Neighbors+C_Smoothness,    data = data_df, mean )
   agg_mse_1d = aggregate( cbind(MSE_Laplace, MSE_VL, MSE_LowRank) ~ Mod+Neighbors+C_Smoothness,    data = data_df, mean )
   colnames(agg_mse_1d)[5] = c("MSE_VL-IW")
-  colnames(agg_mse_2d)[5:6] = c("MSE_VL-IW", "MSE_RF-full")
-
+  colnames(agg_mse_2d)[5:6] = c("MSE_VL-IW", "MSE_VL-RF")
+  if(exclude_iw) agg_mse_2d = agg_mse_2d[,-5]
   agg_mse = agg_mse_1d
   if(dim==2) agg_mse = agg_mse_2d
 
@@ -67,13 +67,14 @@ create_LS_plot = function(data_df, dim, colScale, shapeScale, exclude_gauss=FALS
   agg_ls_2d[,4:7] = -agg_ls_2d[,4:7]
 
   colnames(agg_ls_1d)[5] ="LS_VL-IW"
-  colnames(agg_ls_2d)[5:6] = c("LS_VL-IW", "LS_RF-full")
-
+  colnames(agg_ls_2d)[5:6] = c("LS_VL-IW", "LS_VL-RF")
+  agg_ls_2d = agg_ls_2d[,-5]
+  
   agg_ls = agg_ls_1d
   if(dim==2) agg_ls = agg_ls_2d
 
 
-  if(ncol(agg_mse)>6) agg_ls[,7] = (agg_ls[,7]-agg_ls[,4])
+  if(ncol(agg_ls)>6) agg_ls[,7] = (agg_ls[,7]-agg_ls[,4])
   agg_ls[,6] = (agg_ls[,6]-agg_ls[,4])
   agg_ls[,5] = (agg_ls[,5]-agg_ls[,4])
   agg_ls[,4] = agg_ls[,4]-agg_ls[,4]
@@ -123,7 +124,7 @@ create_time_plot = function(data_df, log_scale= FALSE){
   colScale <- scale_colour_manual(name = "Algorithm",values = c(1,3,2))
   shapeScale <- scale_shape_manual(name = "Algorithm",values = c(1,2,0))
   agg_time = aggregate( cbind(Time_Laplace, Time_VL_z, Time_LowRank) ~ Mod+Sample,    data = data_df, mean )
-  colnames(agg_time)[c(2:5)] = c("n", "Laplace", "RF-full", "LowRank")
+  colnames(agg_time)[c(2:5)] = c("n", "Laplace", "VL", "LowRank")
 
   agg_time = create_mod_factor(agg_time)
   time_melted = melt(agg_time, id = c("Mod", "n"))
@@ -131,7 +132,7 @@ create_time_plot = function(data_df, log_scale= FALSE){
 
   p1 = ggplot(time_melted, aes(x = n, y = Time, color = Algorithm, shape =Algorithm, linetype = Algorithm))+
     geom_line() + geom_point() +theme_bw() + theme(legend.position = "top")+ scale_shape(solid=FALSE)+
-    facet_wrap(.~ Mod, scales = "free_y", nrow=1) +colScale+shapeScale
+    facet_wrap(.~ Mod, scales = "free_y", nrow=1) +colScale+shapeScale+ylab("Time (s)")
 
   if(log_scale) p1 = p1+scale_y_log10()+scale_x_log10()
 
@@ -149,7 +150,7 @@ create_MSE_vs_n_plot = function(data_df){
   shapeScale <- scale_shape_manual(name = "Algorithm",values = c(1,0,2))
 
   agg_tmse = aggregate( cbind(MSE_Laplace, MSE_VL_z, MSE_LowRank) ~ Mod+Sample,    data = data_df, mean )
-  colnames(agg_tmse)[4] = c("MSE_RF-full")
+  colnames(agg_tmse)[4] = c("MSE_VL-RF")
 
   agg_tmse = create_mod_factor(agg_tmse)
   MSE_melted = melt(agg_tmse, id = c("Mod", "Sample"))
@@ -189,6 +190,8 @@ create_llh_contour_plot = function(data_df){
 
 }
 
+
+
 #### Generate 1D Plots ####
 
 ### 1D plots
@@ -211,9 +214,9 @@ create_LS_plot(data_df, dim=1, colScale=colScale_1D, shapeScale=shapeScale_1D )
 
 ### 2D Simulation MSE + LS
 data_df = read.csv("../CPP_analysis/2D_nonpara_VLZY_fdg.csv")
-colScale_2D <- scale_colour_manual(name = "Algorithm",values = c(1,2,3,4))
-shapeScale_2D <- scale_shape_manual(name = "Algorithm",values = c(NA,0,2,4))
-create_MSE_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D )
+colScale_2D <- scale_colour_manual(name = "Algorithm",values = c(1,2,4,3))
+shapeScale_2D <- scale_shape_manual(name = "Algorithm",values = c(NA,0,4,2))
+create_MSE_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D, exclude_iw = FALSE )
 #ggsave("2D_MSE.pdf", device= "pdf",width = 8, height = 5)
 create_LS_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D )
 #ggsave("2D_LS.pdf", device= "pdf",width = 8, height = 5)
@@ -223,7 +226,7 @@ create_LS_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D )
 data_df = read.csv("../CPP_analysis/time_nonparatest_VLZY.csv")
 data_df2 = read.csv("../CPP_analysis/gauss_time.csv")
 data_df =rbind(data_df, data_df2)
-time_plot(data_df)
+create_time_plot(data_df)
 #ggsave("time_log_2D_vlzy_GG.pdf", device= "pdf", width = 8, height = 3)
 
 
@@ -233,13 +236,14 @@ create_MSE_vs_n_plot(data_df)
 #ggsave("mse_vs_sample_2D_horiz_log.pdf", device= "pdf",width = 8, height = 3)
 
 
-#2D Param estimation, pois
+#2D Param estimation, pois example
 data_df = read.csv("../CPP_analysis/param_est_pois_2D_VLZY_LR_yinit_2.csv")
 create_llh_contour_plot(data_df)
+#ggsave("2D_pois_contour.pdf", device= "pdf",width = 7, height = 4)
 
 
-#Generate simulated grid search plot
-
-
-
-#ggsave("LGCP_MSE_pois_v4.pdf", device= "pdf",width = 7, height = 4)
+#### 3D, 4D plots ####
+data_df = read.csv("../CPP_analysis/4D_nonpara.csv")
+create_MSE_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D )
+#ggsave("3d_MSE.pdf", device= "pdf",width = 7, height = 4)
+#ggsave("4d_MSE.pdf", device= "pdf",width = 7, height = 4)
