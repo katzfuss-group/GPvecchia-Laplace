@@ -3,9 +3,9 @@ require(directlabels)
 library(reshape)
 library(scales) # transparent plots
 
-####################################################################################
-########  Contains all plots that do not involve HMC/MCMC or satellite data  #########
-####################################################################################
+#######################################################################################
+#####  Contains all plots that do not involve HMC/MCMC, LGCP, or satellite data  ######
+#######################################################################################
 
 map_mod = function(x) c("Gaussian", "Logistic", "Poisson","Gamma")[x]
 
