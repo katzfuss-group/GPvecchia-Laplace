@@ -1,7 +1,7 @@
 
-##################################################################################
+#**********************************************************************************
 ###################   Compare HMC to VL           ################################
-##################################################################################
+#*********************************************************************************
 
 
 # run HMC for relatively small sample
@@ -104,7 +104,6 @@ dev.off()
 
 ### HMC GG trace plots
 par(mfrow=c(4,1))
-
 thinned_path = data.frame(cbind(1:nrow(hmc_big_path$thinned),hmc_big_path$thinned[,c(10,45,245,445)]))
 colnames(thinned_path)<- c("Sample", "10","45","245","445")
 melty_thin = melt(thinned_path, id = "Sample")
@@ -115,30 +114,6 @@ ggplot(data = melty_thin, aes(y = Value, x=Sample))+
 ggsave("HMC_trace_GG.pdf", device= "pdf",width = 8, height = 4)
 
 acf(hmc_big_path$thinned[,10])
-
-
-#### Example plots, 1D data ####
-pdf("LL_VL_L.pdf", height = 4, width = 7)
-par(mfrow=c(1,1),mar=c(2,2.1,2,1))
-plot(ls$locs, ls$y, main = "Example Posterior Modes", type = "l", xlab = "Loc", ylab = "Obs")
-points(ls$locs, vl_pred$mean, type = "l",col=3, lwd =3)
-points(ls$locs, ll_pred$mean, type = "l",col=5, lwd = 1)
-points(ls$locs, lap_pred$mean, type = "l",col=2, lwd = 1)
-legend("bottom", legend = c("VL-3","LL-3","Laplace","Latent"),
-       col = c(3,5,2,1), lty = c(1,1,1,1), lwd = c(3,1,1,1), bty = "n")
-dev.off()
-
-pdf("HMC_VL.pdf", height = 4, width = 7)
-par(mfrow=c(1,1),mar=c(2,2.1,2,1))
-plot(ls$locs, ls$y, main = "HMC and VL", type = "l", xlab = "Loc", ylab = "Obs")
-points(ls$locs, vl_pred$mean, type = "l",col=3, lwd = 3)
-#points(ls$locs, vl_pred$mean, type = "l",col=5, lwd = 2)
-for(i in 2:6) points(ls$locs, realizations_list[i,], col=2, type = "l", pch = 1, lty = 3)
-points(ls$locs, hmc_pred_big$y_HMC, col=4, type = "l", pch = 1)
-legend("bottom", legend = c("HMC 8k", "HMC 100k","VL-3", "Latent"),
-       col = c(2,4,3,1), lty = c(3,1,1,1), lwd = c(1,1,3,1), bty = "n")
-dev.off()
-
 
 
 
@@ -175,9 +150,9 @@ points(1:39*2, mse_by_sample, pch = 1, ylim = c(.64, .9))
 legend("topright", legend = c("HMC", "Laplace", "VL"), lwd = c(1,2,2), col=c(1,1,3))
 dev.off()
 
-####################################################################################################
-###################    Hamiltonian MCMC:   Implementation       ###################################
-####################################################################################################
+#*****************************************************************************************
+###################    Hamiltonian MCMC:   Implementation       ##########################
+#*****************************************************************************************
 library(fields)
 
 
@@ -250,8 +225,9 @@ run_HMC<- function(lik_mod, niter =100000, burnin=5000 ){
   return(list("y_HMC"=y_hmcmc, "sd_HMC"=y_hvar, "burned"=burn, "thinned" = hthin))
 }
 
-covfun <- function(locs) Matern(rdist(locs), range = .3, smoothness = .5)
-ps = pois_sample(50, covfun, seed_val =126, dom=1, dimen=1)
+#covfun <- function(locs) Matern(rdist(locs), range = .3, smoothness = .5)
+#ps = pois_sample(50, covfun, seed_val =126, dom=1, dimen=1)
+#ls = logistic_sample(250, covfun, seed =126, dom=1, dimen=1)
 
 par(mfrow=c(1,2))
 plot(ps$locs, ps$y, main = "Latent GP",type = "b")
@@ -262,9 +238,10 @@ plot(ps$locs, ps$z, main = "Observed Counts for locations", type = "b")
 #hmc_fit = run_HMC(ps)
 
 
-####################################################################################################
+#***************************************************************************************************
 ###################    MCMC (No HMC)           ##################################################
-####################################################################################################
+#***************************************************************************************************
+
 # For comparison to HMC
 library(mvtnorm)
 
@@ -321,3 +298,56 @@ f$mids[which(f$counts==max(f$counts))]
 
 
 
+#***************************************************************************************************
+####################   Example plots, 1D data     ##################################################
+#***************************************************************************************************
+source("../GPvecchia/server/importer.R")
+source(file.path("server/data_generating_functions.R"))
+
+dimen=1 # number of spatial dimensions
+domn=1
+samp_size = 250
+sig2=1; range=.05; smooth=1.5
+covparms=c(sig2,range,smooth)
+
+covfun <- function(locs) sig2*Matern(rdist(locs),range=range,smoothness=smooth)
+
+# current data generation is over a uniform lattice
+#source(file.path("server/data_generating_functions.R"))
+ls=logistic_sample(samp_size,covfun, seed = 126, dom = domn, dimen=dimen)
+
+m=5
+vecchia.approx=vecchia_specify(ls$locs, m)#, cond.yz = "z"  )
+vecchia.approx_LL=vecchia_specify(ls$locs, m, conditioning = "firstm")#, cond.yz = "z"  )
+ll_pred = calculate_posterior_VL(ls$z, vecchia.approx_LL, ls$type, covparms)
+vl_pred = calculate_posterior_VL(ls$z, vecchia.approx, ls$type, covparms)
+lap_pred = calculate_posterior_laplace(ls$z, ls$type, covfun(ls$locs), return_all = TRUE)
+
+
+hmc_pred_big = run_HMC(ls)
+hmc_fit_small1 = run_HMC(ls, niter = 6000)
+hmc_fit_small2 = run_HMC(ls, niter = 6000)
+hmc_fit_small3 = run_HMC(ls, niter = 6000)
+realizations_list = cbind(hmc_fit_small1$y_HMC, hmc_fit_small2$y_HMC, hmc_fit_small3$y_HMC)
+  
+pdf("Simple_comparison_HMC.pdf", height = 7, width = 7)
+par(mfrow=c(1,1))#,mar=c(2,2.1,2,1
+plot(ls$locs, ls$y, main = "Posterior Predictions, Logistic Obs", type = "p", xlab = "Location", ylab = "Latent Value", pch = ".")
+points(ls$locs, lap_pred$mean, type = "l",col=4, lwd = 1)
+for(i in 1:3) points(ls$locs, realizations_list[,i], col=6, type = "l")
+points(ls$locs, hmc_pred_big$y_HMC, col=5, type = "l")
+legend("bottomright", legend = c("Truth", "Laplace", "HMC 6k", "HMC 100k"),
+       col = c(1,4,6,5), lty = c(NA,1,1,1), pch = c(".",NA, NA, NA),bty = "y")
+dev.off()
+
+
+pdf("Simple_comparison.pdf", height = 7, width = 7)
+par(mfrow=c(1,1))#,mar=c(2,2.1,2,1)
+plot(ls$locs, ls$y, main = "Posterior Predictions, Logistic Obs", type = "p", xlab = "Location", ylab = "Latent Value", pch = ".")
+points(ls$locs, vl_pred$mean, type = "l",col=3, lwd = 3)
+points(ls$locs, ll_pred$mean, type = "l",col=2, lwd = 1)
+points(ls$locs, lap_pred$mean, type = "l",col=4, lwd = 1)
+points(ls$locs, hmc_pred_big$y_HMC, col=5, type = "l", pch = 1)
+legend("bottom", legend = c("Truth", "Laplace", "LowRank (m=5)", "VL (m=5)", "HMC 100k"),
+       col = c(1, 4, 2,3,5), pch = c(".",NA, NA, NA, NA), lty = c(NA, 1,1,1,1), bty = "y")
+dev.off()
