@@ -5,12 +5,12 @@ locs = as.matrix(locs)
 n = length(locs[,1])
 
 global_m = 20 #5 10 20 40
-n_sample = 2e4
+n_sample =2.5e5
 
 # test on subset
 set.seed(123)
 sub_idx = sample(length(z), n_sample, replace = FALSE)
-#pred_idx = sample(setdiff(1:length(z), sub_idx), n_sample, replace = FALSE)
+pred_idx = sample(setdiff(1:length(z), sub_idx), n_sample, replace = FALSE)
 
 sub_locs = locs[sub_idx,]
 z_sub = z[sub_idx]
@@ -110,7 +110,7 @@ if(TRUE){
   ## Iterative method:  estimate a, then covparms, then a again
   print("Step 2, optimizing parameters")
   a_prev = 0.9
-  covparms_prev = c(.8, 120,   1.3)
+  covparms_prev = c(.8, 40,   1.3)
   print(a_prev);print(covparms_prev)
   t_start = Sys.time()
   iter_count = 1
@@ -149,11 +149,14 @@ if(TRUE){
 
 
 
+
+
+
 #### Posterior estimation and predictions  ####
 # set parameters found in exploration
-if(False){
-  a = 0.88
-  covparms = c(0.9, 110,   1.5)
+if(FALSE){
+  a = 0.89
+  covparms = c(0.25, 31,   3)
   global_m_lr = round(global_m^(3/2))
   default_lh_params = list("alpha"=a, "sigma"=sqrt(.1))
 
@@ -166,7 +169,9 @@ if(False){
 
   ## Calculate posterior using LR
   t_start = Sys.time() # Time LR
-  vecchia.approx.lr = vecchia_specify(sub_locs, m=global_m_lr, conditioning = "firstm")
+  #vecchia.approx.lr = vecchia_specify(sub_locs, m=global_m_lr, conditioning = "firstm")
+  vecchia.approx.lr = vecchia_specify(sub_locs, m=global_m_lr, conditioning = "mra",
+                                      mra.options = list(r=c(global_m_lr,1)))
   post_lr = calculate_posterior_VL(z_sub, vecchia.approx.lr, "gamma" , covparms, likparms = default_lh_params, prior_mean = XB)
   t_end = Sys.time();  time_dur = as.double(difftime(t_end, t_start, units = "mins"))
   paste("Finished LR posterior in", time_dur, "minutes")
@@ -187,18 +192,32 @@ if(False){
   paste("Finished posteriors in", time_dur, "minutes")
 
 
+
+  #####  Zoom ####
   ## Make predictions on a zoomed region, to see small scale structure
   print("Running predictions on zoomed observations!"); t_start = Sys.time()
+  # load("MODIS_posteriors.RData")
+  zx1 = 800
+  zx2 = 1000
+  zy1 = 200
+  zy2 = 400
+
 
   # Subset locations
-  zoom_idx = intersect(which(locs[,1] >1000 & locs[,1]<1100),  which(locs[,2] <100 & locs[,2] > 0))
-  # remove obs locs
+  zoom_idx = intersect(which(locs[,1] >zx1 & locs[,1]<zx2),  which(locs[,2] >zy1 & locs[,2] < zy2))
+  # remove obs locs, for comparison plot
   zoom_idx = setdiff(zoom_idx, sub_idx)
   locs_zoom = locs[zoom_idx,]
   locs_zzoom=locs_zoom
   z_zoom =z[zoom_idx]
 
-  locs_zoom = rbind(locs_zoom, matrix(c(1009.5, 12.5,1013.5, 42.5), nrow=2, byrow = TRUE))
+  # some locations are missing from the data, fill in gaps for prediction
+  full_set_zoom = expand.grid(seq(zx1+.5, zx2-.5), seq(zy1+.5, zy2-.5))
+  colnames(full_set_zoom)=c("x","y")
+  dup_array = duplicated(rbind(sub_locs,full_set_zoom))
+  # take all rows that aren't duplicates of observations
+  locs_zoom = full_set_zoom[which(dup_array[(length(sub_locs[,1])+1):length(dup_array)]==FALSE),]
+  locs_zoom = as.matrix(locs_zoom)
   #quilt.plot(locs_zoom, z_zoom, nx=100, ny=100)
 
   # Calculate trend over prediction region
@@ -206,7 +225,7 @@ if(False){
   trend_zoom[,1]=1
   XB_zoom = trend_zoom%*%beta
 
-  # Predict on zoomed region using VL
+  ## Predict on zoomed region using VL
   t_start = Sys.time() # Time VL zoom
   z_VLpseudo = post_zy$t - XB
   nuggets_VLpseudo = post_zy$D
@@ -219,7 +238,11 @@ if(False){
   t_start = Sys.time() # Time LR
   z_VLRpseudo = post_lr$t-XB
   nuggets_VLRpseudo = post_lr$D
-  vecchia.approx.pred.zoom.lr = vecchia_specify(sub_locs, m=global_m_lr, locs.pred=locs_zoom, conditioning = "firstm")
+  #vecchia.approx.pred.zoom.lr = vecchia_specify(sub_locs, m=global_m_lr, locs.pred=locs_zoom, conditioning = "firstm")
+  vecchia.approx.pred.zoom.lr = vecchia_specify(sub_locs, m=global_m_lr, locs.pred=locs_zoom, conditioning = "mra",
+                                                mra.options = list(r=c(global_m_lr,1)))
+
+
   predsLR_zoom=vecchia_prediction(z_VLRpseudo, vecchia.approx.pred.zoom.lr, covparms, nuggets_VLRpseudo)
   t_end = Sys.time();  time_dur = as.double(difftime(t_end, t_start, units = "mins"))
   paste("Finished LR zoom pred in", time_dur, "minutes")
@@ -227,30 +250,33 @@ if(False){
 
 
   ##  obs within zoomed locations
-  zoom_idx_vis = intersect(which(sub_locs[,1] >1000 & sub_locs[,1]<1100),  which(sub_locs[,2] <100 & sub_locs[,2] > 0))
+  zoom_idx_vis = intersect(which(sub_locs[,1] >zx1 & sub_locs[,1]<zx2),  which(sub_locs[,2] >zy1 & sub_locs[,2] < zy2))
   sub_locs_zoom = as.matrix(sub_locs[zoom_idx_vis,])
   z_sub_zoom = as.matrix(z_sub[zoom_idx_vis])
 
 
 
   ## Zoomed plots
-  pdf("server/MODIS_analysis/paper_plots/MODIS_compare_zoom_VL_LR.pdf", width = 9, height = 8)
+  pdf("server/MODIS_analysis/saved_data/MODIS_compare_zoom_VL_LR.pdf", width = 9, height = 8)
+  npts = 200
+  z_lims =c(.01, .9)
   par(mfrow=c(2,2), mar = rep(2,4))
-  quilt.plot(sub_locs_zoom, z_sub_zoom, zlim=c(.01, .9), main = "Observed Training Data", nx = 100, ny=100,
+  quilt.plot(sub_locs_zoom, z_sub_zoom, zlim=z_lims, main = "Observed Training Data", nx = npts, ny=npts,
              add.legend = FALSE, xaxt='n', yaxt = "n")
-  quilt.plot(locs_zzoom, z_zoom, zlim=c(.01, .9), main = "Test Data", nx = 100, ny=100, nlevel=1024)
+  quilt.plot(locs_zzoom, z_zoom, zlim=z_lims, main = "Test Data", nx = npts, ny=npts, nlevel=1024)
   par(mar = c(2,1.5,2,1.5))
-  quilt.plot(locs_zoom, exp(predsLR_zoom$mu.pred+XB_zoom), zlim=c(.01,.9),main = "Predictions LR (m=89)", nx = 100, ny=100,
+  quilt.plot(locs_zoom, exp(predsLR_zoom$mu.pred+XB_zoom+1/2*predsLR_zoom$var.pred),
+             zlim=z_lims,main = "Predictions LR (m=89)", nx = npts, ny=npts,
              add.legend = FALSE,xaxt='n', yaxt = "n", nlevel=1024)
-  quilt.plot(sub_locs_zoom, exp(predsLR_zoom$mu.obs+XB)[zoom_idx_vis], zlim=c(.01,.9), nx = 100, ny=100,
-             add.legend = FALSE, add = TRUE)
+  quilt.plot(sub_locs_zoom, exp(predsLR_zoom$mu.obs+XB+1/2*predsLR_zoom$var.obs)[zoom_idx_vis],
+             zlim=z_lims, nx = npts, ny=npts, add.legend = FALSE, add = TRUE)
 
 
-  quilt.plot(locs_zoom, exp(preds_zoom$mu.pred+XB_zoom), zlim=c(.01,.9), main = "Predictions VL (m=20)", nx = 100, ny=100,
-             add.legend = FALSE, xaxt='n', yaxt = "n", nlevel=1024)
+  quilt.plot(locs_zoom, exp(preds_zoom$mu.pred+XB_zoom+1/2*preds_zoom$var.pred), zlim=z_lims, main = "Predictions VL (m=20)",
+             nx = npts, ny=npts, add.legend = FALSE, xaxt='n', yaxt = "n", nlevel=1024)
 
-  quilt.plot(sub_locs_zoom, exp(preds_zoom$mu.obs+XB)[zoom_idx_vis], zlim=c(.01,.9),xlim = c(1000, 1100),
-             ylim = c(0,100),nx = 100, ny=100,
+  quilt.plot(sub_locs_zoom, exp(preds_zoom$mu.obs+XB+1/2*preds_zoom$var.obs)[zoom_idx_vis], zlim=z_lims,xlim = c(zx1, zx2),
+             ylim = c(zy1, zy2), nx = npts, ny=npts,
              add.legend = FALSE, add = TRUE, nlevel=1024)
 
   dev.off()
@@ -263,11 +289,8 @@ if(False){
 
 
 
-
-
-
-
-  ##### prediction testing:  use prediction locations to measure mse  ####
+  ##### Prediction Test####
+  ##  use prediction locations to measure mse, CRPS
   print("Running predictions on observed locations!"); t_start = Sys.time()
 
   # get locations and z for preds
@@ -298,7 +321,7 @@ if(False){
   paste("Finished LR full predictions in", time_dur, "minutes")
 
 
-  #### calculate comparison metrics ####
+  #### Prediction Scoring  ####
   # Interval score from Gneiting and Raftery
   interval_score = function(post,preds, XB_pred,  z_pred ){
     upper_quant = post$data_link(qnorm(p=.95,
@@ -317,8 +340,9 @@ if(False){
 
   get_crps = function(z, preds, a, XB_pred, samples_to_gen = 10){
     # get mean from prediction method
-    pred_mu = preds$mu.pred+XB_pred
-    pred_sd = sqrt(max(preds$var.pred,0))
+    z = z
+    pred_mu = (preds$mu.pred+XB_pred)
+    pred_sd = sqrt(pmax(preds$var.pred, 0))
 
     sample_mat = matrix(0, ncol=samples_to_gen, nrow = length(z))
     for(smpl_idx in 1:samples_to_gen){
@@ -331,13 +355,10 @@ if(False){
     return( scoringRules::crps_sample(y=z, dat=sample_mat) )
   }
 
-
-
   crps_vl = mean(get_crps(z_pred, preds, a, XB_pred, 200))
   crps_lr = mean(get_crps(z_pred, predsLR, a, XB_pred, 200))
-  #crps_mra = mean(get_crps(z_pred, predsmr, a, XB_pred, 200))
 
-  ## Assuming lognormal distribution for mean: compare truth to pred mean (lognormal median) and lognormal mean
+  ## Marginal mean: compare truth to marginal predictive median and mean
   mean_square_median_error_ZY = mean((exp(preds$mu.pred+XB_pred)-z_pred)^2)
   mean_square_median_error_LR = mean((exp(predsLR$mu.pred+XB_pred)-z_pred)^2)
 
@@ -363,65 +384,80 @@ if(False){
 
 
   # plots at prediction locations
-  pdf("server/MODIS_analysis/paper_plots/MODIS_Compare_preds_VL_LR_fine.pdf", width = 9, height = 4)
-  n_pts = 256
+  pdf("server/MODIS_analysis/saved_data/MODIS_Compare_preds_VL_LR.pdf", width = 9, height = 4)
+  n_pts = 128
   par(mfrow=c(1,3), mar=rep(2,4), oma=rep(1.4,4))
-  quilt.plot(pred_locs, exp(predsLR$mu.pred+XB_pred), zlim=c(.01, 2.9),  main = "Predictions LR (m=89)", nx = n_pts, ny=n_pts, add.legend = FALSE, nlevel=1024)
+  quilt.plot(pred_locs, exp(predsLR$mu.pred+XB_pred+1/2*predsLR$var.pred), zlim=c(.01, 2.9),  main = "Predictions LR (m=89)", nx = n_pts, ny=n_pts, add.legend = FALSE, nlevel=1024)
   quilt.plot(pred_locs, z_pred, zlim=c(.01, 2.9), main = "Test Data", nx = n_pts, ny=n_pts, add.legend = FALSE)
-  rect(1000, 0, 1100, 100, border = "white")  # for zoomed predictions, calculated earlier
-  quilt.plot(pred_locs,  exp(preds$mu.pred+XB_pred), zlim=c(.01,2.9), main = "Predictions VL (m=20)", nx = n_pts, ny=n_pts, add.legend = TRUE)
+  rect(1000, 0, 1200, 200, border = "white")  # for zoomed predictions, calculated earlier
+  quilt.plot(pred_locs,  exp(preds$mu.pred+XB_pred+1/2*preds$var.pred), zlim=c(.01,2.9), main = "Predictions VL (m=20)", nx = n_pts, ny=n_pts, add.legend = TRUE)
   dev.off()
 
 
+  ##### Likelihood comparison ####
+  # compare approximate likelihoods to justify m=20
 
-  ##### Image plot versions ######
-  predmat= as.matrix(exp(predsLR_grid$mu.pred+XB_pred), nrow=100)
-  pdf("Imageplot_version_pred_LowRank.pdf", width = 9, height = 4.5)
-  par(mfrow=c(1,2))
-  quilt.plot(offset_locs, exp(predsLR_grid$mu.pred+XB_pred), zlim=c(.01,.9),
-             main = "LowRank Pred, quilt.plot", nx = 128, ny=128)
-  image.plot(1:128, 1:128, predmat, zlim=c(.01,.9),main = "LowRank Pred, image.plot")
+  llh2 = matrix(0, nrow = 6, ncol=3)
+  covparms = c(0.25, 31,  3)
+  mvals = c(1, 2, 5,10,20,40)
+  default_lh_params = list("alpha"=.89, "sigma"=sqrt(.1))
+
+  for(m_idx in 1:6){
+    m = mvals[m_idx]
+    vecchia.approx = vecchia_specify(sub_locs, m=m, cond.yz = "zy")
+    vecchia.approx.IW = vecchia_specify(sub_locs, m=m)
+
+    vll = vecchia_laplace_likelihood(z_sub,
+                                     vecchia.approx,
+                                     likelihood_model="gamma",
+                                     covparms = covparms,
+                                     return_all = FALSE,
+                                     likparms = default_lh_params,
+                                     prior_mean = XB,
+                                     vecchia.approx.IW=vecchia.approx.IW,
+                                     y_init = NA )
+
+    vecchia.approx.lr = vecchia_specify(sub_locs, m=m, conditioning = "mra", mra.options = list(r=c(m,1)))
+
+    lrll = vecchia_laplace_likelihood(z_sub,
+                                      vecchia.approx.lr,
+                                      likelihood_model="gamma",
+                                      covparms = covparms,
+                                      return_all = FALSE,
+                                      likparms = default_lh_params,
+                                      prior_mean = XB,
+                                      vecchia.approx.IW=NA,
+                                      y_init = NA )
+    print(c(m, vll, lrll))
+    llh2[m_idx,] = c(m, vll, lrll)
+  }
+
+  vecchia.approx.lr = vecchia_specify(sub_locs, m=89, conditioning = "mra", mra.options = list(r=c(89,1)))
+# special case for low rank:  m=89
+  lrll_89 = vecchia_laplace_likelihood(z_sub,
+                                    vecchia.approx.lr,
+                                    likelihood_model="gamma",
+                                    covparms = covparms,
+                                    return_all = FALSE,
+                                    likparms = default_lh_params,
+                                    prior_mean = XB,
+                                    vecchia.approx.IW=NA,
+                                    y_init = NA )
+
+  # columns of llh2
+  m = c(1,2,5,10,20, 40)
+  lr = c(-93916.26, -93721.05, -93509.21, -93014.81,  -91873.01, -87465.02)
+  vl = c(-53210.20,  -53517.53,  -53486.39,  2.5e5/1e5*-22426.45 ,  -54214.64,  -54215.30)
+
+  #n=1e5: 2.5e5/1e5*-22426.45 vs -53532.99 (different seed)
+  pdf("MODIS_vll.pdf", width=5, height = 5)
+  par(mar=c(4,4,2,1))
+  plot(m, -lr, type ="b", ylim = c(min(-vl), max(-lr)),
+       main = "Approximate Log Likelihood",
+       xlab = "m", ylab = "Neg. LLH", col=2)
+  points(m, -vl, type = "b", col=1)
+  points(20, 77988.55, type = "p", col=2, pch = 10)
+  points(20, 54214.64, type = "p", col=1, pch = 10)
+  legend("right", legend = c("VL", "LowRank","LowRank: m=89"), col = c(1,2,2), pch = c(1,1,10), bty = "o")
   dev.off()
-
-
-  # Calculated coarse gridded predictions, not in paper
-  print("Running predictions on grid!"); t_start = Sys.time()
-  grid.oneside=seq(1,1353,length=256)
-  grid.secside=seq(1,2029, length=256)
-  offset_locs=as.matrix(expand.grid(grid.oneside,grid.secside)) # grid of pred.locs
-
-  trend_pred = offset_locs
-  trend_pred[,1]=1
-  XB_pred = trend_pred%*%beta
-
-  t_start = Sys.time() # Time ZY grid pred
-  z_VLpseudo = post_zy$t - XB
-  nuggets_VLpseudo = post_zy$D
-  vecchia.approx.pred = vecchia_specify(sub_locs, m=global_m, locs.pred=offset_locs)
-  preds_grid=vecchia_prediction(z_VLpseudo, vecchia.approx.pred, covparms, nuggets_VLpseudo)
-  t_end = Sys.time();  time_dur = as.double(difftime(t_end, t_start, units = "mins"))
-  paste("Finished ZY grid pred pred in", time_dur, "minutes")
-
-
-
-  t_start = Sys.time() # Time LR
-  z_VLRpseudo = post_lr$t-XB
-  nuggets_VLRpseudo = post_lr$D
-  vecchia.approx.pred.lr = vecchia_specify(sub_locs, m=global_m_lr, locs.pred=offset_locs, conditioning = "firstm")
-  predsLR_grid=vecchia_prediction(z_VLRpseudo, vecchia.approx.pred.lr, covparms, nuggets_VLRpseudo)
-  t_end = Sys.time();  time_dur = as.double(difftime(t_end, t_start, units = "mins"))
-  paste("Finished LR gridded predictions in", time_dur, "minutes")
-
-
-  # plots for grid
-
-  pdf("server/MODIS_analysis/saved_data/MODIS_Compare_preds_grid_VL_LR.pdf", width = 12, height = 5)
-  par(mfrow=c(1,3))
-  quilt.plot(sub_locs, z_sub, zlim=c(.01, 2.9), main = "Obs", nx = 256, ny=256)
-  quilt.plot(offset_locs, exp(preds_grid$mu.pred+XB_pred), zlim=c(.01,2.9), main = "exp(VL)", nx = 256, ny=256)
-  quilt.plot(offset_locs, exp(predsLR_grid$mu.pred+XB_pred), zlim=c(.01,2.9),main = "exp(LR)", nx = 256, ny=256)
-  dev.off()
-
-  save(offset_locs,sub_locs, z_sub, preds_grid, predsLR_grid, XB_pred, file = "server/MODIS_analysis/saved_data/MODIS_grid_preds.RData")
-
 }
