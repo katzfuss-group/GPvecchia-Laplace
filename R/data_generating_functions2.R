@@ -2,7 +2,7 @@ library(fields)
 library(RandomFields)
 
 # helper method to create a uniform lattice over arbitrary dimension
-# Probably implemented elsewhere, should check
+# Implements RFsimulate for efficiently generating large samples
 create_locs = function(n_tot=100, dimen=1, dom=1){
   #n=5; dimen=3; dom=1
   # for higher dimension, generate the right number of locations
@@ -91,10 +91,9 @@ gauss_sample = function(n, cov_model, seed_val=125, dom=1, dimen=1 , sigma = sqr
 
 
 ################# Gamma  #########################
-## one parameter: assume alpha known (alpha = 1: exponential)
-## two parameter: what does it mean?
-#beta^alpha / Gamma(alpha) * x^{alpha - 1} * exp(-bx)
-#exp(-bx + (alpha-1)log(x) +alpha*log(beta)-log(Gamma(alpha)))
+## uses older parmeterization for one parameter: 
+# assumes alpha known (alpha = 1: exponential)
+
 gamma_sample = function(n, cov_model, seed_val=125, dom=1, dimen=1, alpha = 2 ){
   set.seed(seed_val)
   locs =create_locs(n, dimen, dom)
@@ -106,12 +105,6 @@ gamma_sample = function(n, cov_model, seed_val=125, dom=1, dimen=1, alpha = 2 ){
   #link
   z = rgamma(n, shape = alpha, rate = exp(y_beta))
 
-  #  d_beta =function(y_o, z) = -z+y_o[,1]/y_o[,2]
-  #  d_alpha = function(y_o, z) = log(z)+log(y_o[,2])-digamma(y_o[,1])
-  #  d_bb = function(y_o, z) -y_o[,1]/y_o[,2]^2 # matrix?  cross matrix?
-  #  d_aa =function(y_o, z) derivative of digamma(y_o[,1])
-  #  d_ab = function(y_o, z) 1/y_o[,2]
-
   gamma_hess = function(y_o, z)   z*exp(y_o)
   gamma_score = function(y_o, z) -z*exp(y_o)+ alpha
   #gamma_llh = function(y_o, z) sum(-y_o*z + (alpha-1)*log(z) +log(y_o^alpha)-n*log(gamma(alpha)))
@@ -119,35 +112,6 @@ gamma_sample = function(n, cov_model, seed_val=125, dom=1, dimen=1, alpha = 2 ){
   return(list("type"="gamma", "locs" =  matrix(locs,ncol=dimen), "z"=z, "y"=y_beta, "C" = C, "hess" = gamma_hess, "score"=gamma_score, "alpha"=alpha, "llh" = gamma_llh))
 }
 
-
-
-
-################# Negative Binomial (NOT FINISHED) #########################
-#ncr(k+r-1,k)*q^r*p^k
-#(k successes,r fail)
-# not implemented yet
-negbin_sample = function(n, covfun, seed = 125, dom = 1){
-
-  set.seed(seed)
-  # create locations for a domain [0, dom]
-  locs = seq(0,dom,length.out=n)
-  C = covfun(locs)
-  y = t(chol(C))%*%rnorm(n)
-  #link
-
-  eta = exp(y)/(1+exp(y))
-  # P(y = 1) = cdf(y)
-  # generate observations
-  z = rnbinom(n,1,prob = eta)
-
-  # store score and hessian functions, update
-  negbin_hess = 0#function(y_o, z) diag(array(exp(y_o)/(1+exp(y_o))^2))
-  negbin_score = 0 # function(y_o, z) z - exp(y_o)/(1+exp(y_o))
-
-  # return object with all components of model
-  return(list("locs" =  matrix(locs,ncol=1), "z"=z, "y"=y, "C"=C, "hess" = logistic_hess, "score"=logistic_score))
-
-}
 
 ##########################################################################################
 ###################### Testing:  Replace with unit tests? ################################
