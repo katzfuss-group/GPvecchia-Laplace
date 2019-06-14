@@ -20,7 +20,7 @@ create_mod_factor = function(agg_df){
 
 ###### Simple Example Plot #####
 create_simple_example = function(){
-  source("../GPvecchia/server/importer.R")
+  # library(GPVecchia) or source("../GPvecchia/server/importer.R")
   source(file.path("server/data_generating_functions.R"))
   
   pdf("simple_example.pdf", width = 7, height = 7)
@@ -232,9 +232,7 @@ create_llh_contour_plot = function(data_df){
 
 
 ###### LGCP plots #######
-
-
-
+# involved, see separate file
 
 #### Generate 1D Plots ####
 
@@ -291,3 +289,71 @@ data_df = read.csv("../CPP_analysis/3D_nonpara.csv")
 create_MSE_plot(data_df, dim=2, colScale=colScale_2D, shapeScale=shapeScale_2D, exclude_gauss = TRUE )
 #ggsave("3d_MSE.pdf", device= "pdf",width = 7, height = 4)
 #ggsave("4d_MSE.pdf", device= "pdf",width = 7, height = 4)
+
+
+
+##### Pseudodata Plots ####
+dimen=1 # number of spatial dimensions
+samp_size=30  # number of observed locs
+domn = 1# domain over which to generate points
+
+sig2=1; range=.05; smooth=1.5
+covparms=c(sig2,range,smooth)
+covfun <- function(locs) sig2*Matern(rdist(locs),range=range,smoothness=smooth)
+m=4
+
+pdf("pseudo_plots_paper.pdf", width = 10, height = 5)
+# setup multiple plots
+m_lay <- matrix(c(1,2,3,3),nrow = 2,ncol = 2,byrow = TRUE)
+layout(mat = m_lay,heights = c(0.4,0.11))
+#source(file.path("server/data_generating_functions.R"))
+# create logistic pseudo-data plot
+ls = logistic_sample(samp_size, covfun, seed = 16, dom = domn, dimen=dimen)
+vecchia.approx=vecchia_specify(ls$locs, m)#, cond.yz = "z"  )
+pred1 = calculate_posterior_VL(ls$z, vecchia.approx, ls$type, covparms, return_all = TRUE)
+pred = pred1
+U = array(pred$t+.5*sqrt(pred$D))
+L =array(pred$t-.5*sqrt(pred$D))
+pred$sd = sqrt(diag(solve(pred$W)))
+df = data.frame("loc" =ls$locs,"t" = array(pred$t), "U" = U, "L" = L,
+                "z" = ls$z, "y" = pred$mean, "U_y" =(pred$mean+.5*pred$sd),
+                "L_y" =(pred$mean-.5*pred$sd))
+par(mar = c(2.5,3.1,2.,2.), mgp = c(1.5,.5,0))
+
+plot(df$loc, df$t , main="Logistic",
+     ylim=range(c(min(df$L), max(df$U))),
+     pch=20, xlab="Location", ylab="")
+arrows(df$loc, df$L, df$loc, df$U, length=0.01, angle=90, code=3, col=3)
+points(df$loc, df$z, col=1)
+points(df$loc, df$U_y, type ="l", lty = 2, col=4)
+points(df$loc, df$L_y, type ="l", lty = 2, col=4)
+points(df$loc, df$y, type = "l", lwd = 2, col=2)
+
+
+# create Poisson pseudo-data plot
+ls = pois_sample(samp_size, covfun, seed = 16, dom = domn, dimen=dimen)
+vecchia.approx=vecchia_specify(ls$locs, m)#, cond.yz = "z"  )
+pred2 = calculate_posterior_VL(ls$z,vecchia.approx, ls$type, covparms, return_all = TRUE)
+pred = pred2
+U = array(pred$t+.5*sqrt(pred$D))
+L =array(pred$t-.5*sqrt(pred$D))
+pred$sd = sqrt(diag(solve(pred$W)))
+df = data.frame("loc" =ls$locs,"t" = array(pred$t), "U" = U, "L" = L,
+                "z" = ls$z, "y" = pred$mean, "U_y" =(pred$mean+.5*pred$sd),
+                "L_y" =(pred$mean-.5*pred$sd))
+
+par(mar = c(2.5,2.1,2.,2.))
+
+plot(df$loc, df$t, main="Poisson",
+     ylim=range(c(min(df$L), max(df$z))),
+     pch=20, xlab="Location", ylab="")
+arrows(df$loc, df$L, df$loc, df$U, length=0.01, angle=90, code=3, col=3)
+points(df$loc, df$z, col=1)
+points(df$loc, df$U_y, type ="l", lty = 2, col=4)
+points(df$loc, df$L_y, type ="l", lty = 2, col=4)
+points(df$loc, df$y, type = "l", lwd = 2, col=2)
+par(mar = c(2.1,2.1,2.,2.), mgp = c(0,0,0))
+plot(1, type = "n", axes=FALSE, xlab="", ylab="")
+legend("bottom", legend = c("Data", "Pseudo data          ", "Pseudo Var  ", "Latent Post  ", "Post CI"),
+       col=c(1,1,3,2,4), pch = c(1,20, NA, NA, NA), lty=c(NA,NA, 1, 1, 2), horiz = TRUE)
+dev.off()
