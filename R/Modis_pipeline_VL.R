@@ -1,4 +1,4 @@
-source("server/importer.R")
+source("server/importer.R") #library(GPVecchia)
 
 load("server/MODIS_analysis/water_vapor_20190328.RData")
 locs = as.matrix(locs)
@@ -25,7 +25,6 @@ X[,1]= 1
 
 
 # glm: IRLS method from taking deriv of llh
-#IRLS
 # t_start = Sys.time()
 # beta = c(1,0.001)
 # for(i in 1:10){
@@ -98,7 +97,7 @@ fit_covparms = function(a, covparms_init, vecchia.approx, vecchia.approx.IW, XB)
 
 
 ## Do parameter estimation for multiple m values
-if(TRUE){
+if(FALSE){
   #param_table = matrix(0, nrow =length(m_vals), ncol =5)
   m_rep = global_m
   print(paste("Estimating parameters for m=", m_rep))
@@ -146,8 +145,18 @@ if(TRUE){
 }
 
 
-
-
+#### Plot parameter estimation results ####
+param_df = read.csv("server/MODIS_analysis/saved_data/measurements.csv")
+param_df$n<-as.factor(param_df$n)
+# remove the time column
+param_df = param_df[,-7]
+# melt data for facet plot
+melted_params = melt(param_df, id.vars = c("n", "m"), measure.vars =c(3,4,5,6))
+levels(melted_params$variable) <- c("a", "sigma^2", "rho", "nu")
+ggplot(melted_params, aes(x = m, y = value, color = n, shape =n, linetype = n))+
+  geom_line() + geom_point() +theme_bw() + theme(legend.position = "top")+ scale_shape(solid=FALSE)+
+  facet_wrap(~variable,scales = "free_y", ncol=4,labeller = label_parsed)
+ggsave("MODIS_param.pdf", width = 10, height = 3)
 
 
 
