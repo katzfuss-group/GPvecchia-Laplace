@@ -5,8 +5,8 @@ library(raster)
 
 #setwd("../MODIS/")
 
-sds = get_subdatasets("MYD05_L2.A2019087.1345.061.NRT.hdf" )  # water vapor set
-gdalinfo("MYD05_L2.A2019087.1345.061.NRT.hdf")
+sds = get_subdatasets("MODIS/MYD05_L2.A2019087.1345.061.NRT.hdf" )  # water vapor set
+gdalinfo("MODIS/MYD05_L2.A2019087.1345.061.NRT.hdf")
 
 
 
