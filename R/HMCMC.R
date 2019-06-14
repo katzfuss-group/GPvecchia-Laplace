@@ -56,9 +56,7 @@ lap_pred = calculate_posterior_laplace(ls$z, ls$type, covfun(ls$locs), return_al
 time_end = Sys.time()
 lap_tim = as.double(difftime(time_end, time_st, units = "secs"))
 
-
-
-load("../CPP_analysis/hmc_mse_time.RData")
+# Rdata files generated in HMC section, time consuming
 load("../CPP_analysis/hmc_big_summary.RData")
 load("../CPP_analysis/hmc_big_path.RData")
 time_inc = hmc_big_res$runtime_seconds/length(hmc_large_means_time$HMC_mse_by_sample)
@@ -85,7 +83,7 @@ mini_dt[,3]=sqrt(mini_dt[,3]/laplace_mse)
 laplace_mse= 1
 
 
-
+#  Show time and accuracy comparison
 pdf("HMC_over_time_big.pdf", width = 9*3/4, height = 5*3/4)
 plot(1:chunks*time_inc, mse_by_sample, log = "x", xlim = c(0.01,10000),
      type = "l", col=4, xlab = "Time (seconds)", ylab = "RRMSE")
@@ -151,7 +149,7 @@ legend("topright", legend = c("HMC", "Laplace", "VL"), lwd = c(1,2,2), col=c(1,1
 dev.off()
 
 #*****************************************************************************************
-###################    Hamiltonian MCMC:   Implementation       ##########################
+###################    Hamiltonian MCMC:   Implementation      ##########################
 #*****************************************************************************************
 library(fields)
 
@@ -225,17 +223,28 @@ run_HMC<- function(lik_mod, niter =100000, burnin=5000 ){
   return(list("y_HMC"=y_hmcmc, "sd_HMC"=y_hvar, "burned"=burn, "thinned" = hthin))
 }
 
-#covfun <- function(locs) Matern(rdist(locs), range = .3, smoothness = .5)
-#ps = pois_sample(50, covfun, seed_val =126, dom=1, dimen=1)
-#ls = logistic_sample(250, covfun, seed =126, dom=1, dimen=1)
+lkhd_seed = 12
+#source(file.path("server/data_generating_functions.R"))
+ls=logistic_sample(samp_size,covfun, seed = lkhd_seed, dom = domn, dimen=dimen)
+mse_fun = function(x) mean((x - ls$y)^2)
 
-par(mfrow=c(1,2))
-plot(ps$locs, ps$y, main = "Latent GP",type = "b")
-plot(ps$locs, ps$z, main = "Observed Counts for locations", type = "b")
+set.seed(1234099)
+t_start_big = Sys.time()
+hmc_pred_big = run_HMC(ls, niter = 300000, burnin = 10000)
+t_end_big = Sys.time()
+HMC_time_big = as.double(difftime(t_end_big, t_start_big, units = "secs"))
 
 
+hmc_big_res = list("runtime_seconds"=HMC_time_big, "hmc_result" = hmc_pred_big$y_HMC,
+                   "sample_dim_dom" = c(samp_size, dimen, domn), "covparms"=covparms, "hmc_seed"=1234099,
+                   "lklhd" = "logistic", "lkhd_seed" =lkhd_seed, "mse" = mse_fun(hmc_pred_big$y_HMC))
+save(hmc_big_res, file = "hmc_big_summary.RData")
 
-#hmc_fit = run_HMC(ps)
+hmc_big_path = list("thinned" = hmc_pred_big$thinned, "lklhd" = "logistic", "lkhd_seed" =lkhd_seed,
+                    "hmc_seed"=1234099, "accept_rate"=hmc_pred_big$accept)
+save(hmc_big_path, file = "hmc_big_path.RData")
+
+
 
 
 #***************************************************************************************************
