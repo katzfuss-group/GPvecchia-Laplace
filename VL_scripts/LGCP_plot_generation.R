@@ -1,6 +1,6 @@
 
 # import VL code somehow
-source("server/importer.R")
+source("VL_scripts/importer.R")
 
 data_distr = "poisson"
 spatial.dim =2 # number of spatial dimensions
@@ -42,7 +42,7 @@ locs_33 = rbind(locs_3, locs_3, locs_3)+rnorm(length(locs_3)*3)*c
 pp_locs = rbind(locs_11, locs_22, locs_33)
 
 # aggregate and plot simulated data
-pdf("LGCP_2D_sample_v5.pdf", height = 4, width = 12)
+pdf("VL_scripts/plots/LGCP_2D_sample_v5.pdf", height = 4, width = 12)
 par(mfrow=c(1,3), mar = c(2.1,2.1,2.1,2.1))
 if(spatial.dim==1) {
 
@@ -93,4 +93,4 @@ quilt.plot(locs,y, main = "Latent", nx =pt_density, ny = pt_density )
 quilt.plot(coarse_locs,posterior$mean, main = "Posterior, VL", nx =pt_density/2, ny = pt_density/2, zlim = c(min(y), max(y)) )
 quilt.plot(coarse_locs,array(post_lap$mean), main = "Posterior, Laplace", nx =pt_density/2, ny = pt_density/2, zlim = c(min(y), max(y)) )
 
-           
+
