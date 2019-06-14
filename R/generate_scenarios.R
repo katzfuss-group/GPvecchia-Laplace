@@ -1,3 +1,8 @@
+# This code is called from terminal to generate a collection 
+# of scenarios to be tested with simulation.  
+# Input:  type of scenario, such as 2D gaussian with various sample sizes
+# Output:  simulation results for the generated scenarios
+
 #!/usr/bin/env Rscript
 source("server/importer.R")
 input_settings = commandArgs(trailingOnly=TRUE)
@@ -171,8 +176,8 @@ parallel_time = as.double(difftime(t_end, t_start, units = "mins"))
 email_subject = paste("Simulation",filename,"completed")
 email_text = paste("Time (minutes): ",parallel_time)
 mime() %>%
-  to("dzilber@tamu.edu") %>%
-  from("dzilber@tamu.edu") %>%
+  to("your_email@school.edu") %>%
+  from("your_email@school.edu") %>%
   subject(email_subject) %>%
   text_body(email_text) -> text_msg
 send_message(text_msg)
