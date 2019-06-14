@@ -1,3 +1,7 @@
+# This code takes a set of parameters defining some simulation scenario,
+# such as data model, covariance parameters, and sample size, then simulates
+# data and compares the resulting estimates of VL to other methods.
+
 
 ##########################################################################
 ##################### Compare models: computation time  ########################
