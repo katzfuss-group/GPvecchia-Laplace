@@ -1,4 +1,5 @@
 source("server/importer.R") #library(GPVecchia)
+require(ggplot2)
 
 load("server/MODIS_analysis/water_vapor_20190328.RData")
 locs = as.matrix(locs)
