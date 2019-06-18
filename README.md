@@ -1,5 +1,5 @@
 # GPVecchia-Laplace
-This repository contains code related to Vecchia-Laplace Approximations for Generalized GP's paper, excluding the package GPVecchia. 
+This repository contains code related to Vecchia-Laplace Approximations for Generalized GP's paper, excluding the package GPVecchia.   Release v0.2-alpha is recommended for reproducibility.
 
 The MODIS folder contains the MODIS satellite data sample, along with a short R script to extract the raw data and create an RData file for performing analysis.
 
