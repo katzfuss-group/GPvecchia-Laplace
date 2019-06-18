@@ -3,8 +3,8 @@ This repository contains code related to Vecchia-Laplace Approximations for Gene
 
 The MODIS folder contains the MODIS satellite data sample, along with a short R script to extract the raw data and create an RData file for performing analysis.
 
-The folder VL-scripts contains the code used to for simulation and application sections of the paper.  
-  - HMCMC.R contains all code and plots including Hamiltonian MC posterior estimation.
+The VL-scripts folder contains the code used to for simulation and application sections of the paper.  
+  - HMCMC.R contains all code and plots that involve Hamiltonian MC posterior estimation.
   - LGCP_plot_generation.R simulates realizations of a Log Gaussian Cox process and downsamples to create gridded Poisson observations.
   - Modis_pipeline_VL.R uses the data file from the MODIS folder to perform parameter estimation via Nelder-Mead and posterior predictions using the GPVecchia package.
   - VL_manuscript_plots.R contains scripts for reproducing all remaining plots from the paper, given the saved data.
