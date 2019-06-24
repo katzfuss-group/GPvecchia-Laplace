@@ -1,5 +1,9 @@
 # GPVecchia-Laplace
-This repository contains code related to Vecchia-Laplace Approximations for Generalized GP's paper. The code relies on the R package GPVecchia, available at https://github.com/katzfuss-group/GPvecchia. Release v0.2-alpha is recommended for reproducibility.
+This repository contains code related to the following paper:
+
+[Zilber, D., & Katzfuss, M. (2019). Vecchia-Laplace approximations of generalized Gaussian processes for big non-Gaussian spatial data. *arXiv:1906.07828*.](https://arxiv.org/abs/1906.07828)
+
+The code relies on the R package GPVecchia, available at https://github.com/katzfuss-group/GPvecchia. Release v0.2-alpha is recommended for reproducibility.
 
 The MODIS folder contains the MODIS satellite data sample, along with a short R script to extract the raw data and create an RData file for performing analysis.
 
