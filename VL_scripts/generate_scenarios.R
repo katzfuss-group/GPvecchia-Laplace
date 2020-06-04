@@ -101,6 +101,16 @@ if(test_type == "time2"){
   dimen=2
   run_laplace = FALSE
 }
+if(test_type == "2D_sm"){
+  d_vals = c(1)  # domain, [0,1]
+  s_vals = c(2500)
+  seed_vals = rep(-1, 100)#
+  smoothness_vals = c(.5, 1.5) #seq(2.5, 2.8, length.out = 25)
+  range_vals = .2
+  nbrs = c(1, 3, 5, 10, 20, 40, 60)
+  dimen = 2
+}
+
 
 
 
