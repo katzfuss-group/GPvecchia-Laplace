@@ -28,6 +28,7 @@ vecchia.approx=vecchia_specify(ls$locs, m, cond.yz='zy')#, cond.yz = "z"  )
 vecchia.approx_LL=vecchia_specify(ls$locs, m, conditioning = "firstm")#, cond.yz = "z"  )
 #####################  comparison  #######################
 mse_fun = function(x) (mean((x - ls$y)^2))
+crps_fun = function(x) scoringRules::crps_sample(ls$y[,1], x)
 time_st = Sys.time()
 # for quick evaluation, compare posteriors
 ll_pred = calculate_posterior_VL(ls$z, vecchia.approx_LL, ls$type, covparms)
@@ -37,19 +38,25 @@ lap_pred = calculate_posterior_laplace(ls$z, ls$type, covfun(ls$locs), return_al
 #### Timings and accuracy for VL and Laplace methods ####
 # To give smooth curve for VL, average over different orderings from vecchia specify
 mse_fun(vl_pred$mean);mse_fun(lap_pred$mean)
-mini_dt = c()
+mini_dt = c(); mini_dt_crps = c()
 set.seed(15)
 for(m in c(1,5,10,20, 40)){#
   run_avg = c()
   for (L in 1:30){
     vecchia.approx=vecchia_specify(ls$locs, m, cond.yz = "zy")
     time_st = Sys.time()
-    vl_pred = calculate_posterior_VL(ls$z,vecchia.approx, ls$type, covparms)
+    vl_pred = calculate_posterior_VL(ls$z,vecchia.approx, ls$type, covparms, return_all = T)
     time_end = Sys.time()
     run_avg = rbind(run_avg,c(as.double(difftime(time_end, time_st, units = "secs")), mse_fun(vl_pred$mean)))
+    
+    sd_VL = sqrt(diag(solve(vl_pred$W)))
+    crps_avg= rbind(crps_avg,c(as.double(difftime(time_end, time_st, units = "secs")), 
+                              mean(scoringRules::crps_norm(y = ls$y, mean =vl_pred$mean, sd = sd_VL))))
   }
   res = apply(X = run_avg,MARGIN = 2,FUN = median)
   mini_dt = rbind(mini_dt, c(m, res))
+  res_crps = apply(X = crps_avg,MARGIN = 2,FUN = median)
+  mini_dt_crps = rbind(mini_dt_crps, c(m, res_crps))
 }
 time_st = Sys.time()
 lap_pred = calculate_posterior_laplace(ls$z, ls$type, covfun(ls$locs), return_all = TRUE)
@@ -63,7 +70,7 @@ time_inc = hmc_big_res$runtime_seconds/length(hmc_large_means_time$HMC_mse_by_sa
 
 
 #calculate improvements in HMC
-chunks = (300000-10000)/100  # thin every 10, chunk = 10 thinned samples
+chunks = (1000000-10000)/100  # thin every 10, chunk = 10 thinned samples
 mse_by_sample = c()
 for(i in 1:chunks){
   mode_approx = colMeans(hmc_big_path$thinned[1:(10*i),])
@@ -80,7 +87,7 @@ laplace_mse= 1
 
 #  Show time and accuracy comparison
 pdf("VL_scripts/plots/HMC_over_time_big.pdf", width = 9*3/4, height = 5*3/4)
-plot(1:chunks*time_inc, mse_by_sample, log = "x", xlim = c(0.01,10000),
+plot(1:chunks*time_inc, mse_by_sample, log = "x", xlim = c(0.01,30000),
      type = "l", col=4, xlab = "Time (seconds)", ylab = "RRMSE")
 abline(h=1, col="grey70")
 points(mini_dt[, 2], mini_dt[, 3], type  ="l", col=3)
@@ -92,6 +99,33 @@ points(1:chunks*time_inc, mse_by_sample, type="l", col=4)
 legend("topleft", legend=c("HMC", "VL", "Laplace"), col = c(4,3,1), lty = c(1,2,NA), pch=c(NA, 18, 1))
 dev.off()
 
+
+
+# Conduct same analysis as MSE with CRPS
+crps_by_sample = c()
+for(i in 1:chunks){
+  crps_chunk = mean(crps_fun(t(hmc_big_path$thinned[1:(10*i),])))
+  crps_by_sample = c(crps_by_sample, crps_chunk)
+}
+time_inc = hmc_big_res$runtime_seconds/chunks
+#normalize to laplace
+laplace_crps = mean(scoringRules::crps_norm(ls$y, lap_pred$mean[,1], lap_pred$sd))
+crps_by_sample_normed = sqrt(crps_by_sample/laplace_crps)
+mini_dt_crps[,3]=sqrt(mini_dt_crps[,3]/laplace_crps)
+laplace_crps= 1
+
+
+#  Show time and accuracy comparison
+pdf("HMC_over_time_CRPS_E6.pdf", width = 9*3/4, height = 5*3/4)
+plot(1:chunks*time_inc, t(crps_by_sample_normed), log = "x", xlim = c(0.01,30000),
+     type = "l", col=4, xlab = "Time (seconds)", ylab = "CRPS")
+abline(h=1, col="grey70")
+points(mini_dt_crps[, 2], mini_dt_crps[, 3], type  ="l", col=3)
+points(c(mini_dt_crps[, 2]), mini_dt_crps[, 3], pch=18, col=3)
+points(lap_tim,laplace_crps)
+points(1:chunks*time_inc, crps_by_sample_normed, type="l", col=4)
+legend("topleft", legend=c("HMC", "VL", "Laplace"), col = c(4,3,1), lty = c(1,2,NA), pch=c(NA, 18, 1))
+dev.off()
 
 
 
@@ -240,6 +274,12 @@ hmc_big_path = list("thinned" = hmc_pred_big$thinned, "lklhd" = "logistic", "lkh
 save(hmc_big_path, file = "saved_data/hmc_big_path.RData")
 
 
+##### Simulation for 20 samples of 8K HMC ####
+HMC_CRPS_samps = rep(0,20)
+for(i in 2:20){
+  hmc_pred_8k = run_HMC(ls, niter = 8000, burnin = 5000)
+  HMC_CRPS_samps[i] = mean(crps_fun(t(hmc_pred_8k$thinned)))
+}
 
 
 #***************************************************************************************************
