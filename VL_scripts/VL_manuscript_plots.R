@@ -360,3 +360,80 @@ plot(1, type = "n", axes=FALSE, xlab="", ylab="")
 legend("bottom", legend = c("Data", "Pseudo data          ", "Pseudo Var  ", "Latent Post  ", "Post CI"),
        col=c(1,1,3,2,4), pch = c(1,20, NA, NA, NA), lty=c(NA,NA, 1, 1, 2), horiz = TRUE)
 dev.off()
+
+
+
+##### Parameter estimation variance table and plots ####
+VL_df= read.csv("VL_scripts/saved_data/101_seed_param_est_VL.csv")
+lap_df = read.csv("VL_scripts/saved_data/101_seed_param_est_lap.csv")
+LR_df = read.csv("VL_scripts/saved_data/101_seed_param_est_LR.csv")
+my_df = rbind(VL_df, LR_df)
+# cast the data frame and keep complete cases
+library(reshape2)
+#  Version 1, by seed and m
+check_cases = reshape(my_df, 
+                      idvar = c("seed", "m"), 
+                      timevar =c("method"), 
+                      v.names = c("Range","Smoothness"), 
+                      direction = "wide")
+
+incomplete_case = merge(check_cases, unique(lap_df), by = "seed", all.x=F, all.y=F)
+incomplete_case$m = incomplete_case$m.x
+
+
+# relative to Truth: compute MSE
+true_range = 0.05; true_smooth = 0.5
+incomplete_case$Range.VL=(incomplete_case$Range.VL-true_range)^2
+incomplete_case$Smoothness.VL=(incomplete_case$Smoothness.VL-true_smooth)^2
+incomplete_case$Range.LR=(incomplete_case$Range.LR-true_range)^2
+incomplete_case$Smoothness.LR=(incomplete_case$Smoothness.LR-true_smooth)^2
+incomplete_case$Range =(incomplete_case$Range -true_range)^2
+incomplete_case$Smoothness =  (incomplete_case$Smoothness-true_smooth)^2
+
+
+require(dplyr)
+## Aggregate MSE by method and m, take square root
+MSE_cases = incomplete_case[,c(11,3,4,5,6, 9,10)]
+fitable = MSE_cases %>% 
+  na.omit() %>% 
+  filter(.data$Range.LR<100) %>% 
+  group_by(m) %>% 
+  summarise(Range_VL_MSE = sqrt(mean(Range.VL)), 
+            Range_VL_low = quantile(Range.VL, c(.05)), 
+            Range_VL_hi = quantile(Range.VL, c(.95)),
+            Smoothness_VL_MSE = sqrt(mean(Smoothness.VL)), 
+            Smoothness_VL_low = quantile(Smoothness.VL, c(.05)), 
+            Smoothness_VL_hi = quantile(Smoothness.VL, c(.95)),
+            Range_LR_MSE = sqrt(mean(Range.LR)), 
+            Range_LR_low = quantile(Range.LR, c(.05)),
+            Range_LR_hi = quantile(Range.LR, c(.95)),
+            Smoothness_LR_MSE = sqrt(mean(Smoothness.LR)), 
+            Smoothness_LR_low = quantile(Smoothness.LR, c(.05)),
+            Smoothness_LR_hi = quantile(Smoothness.LR, c(.95)),
+            Range_Lap_MSE = sqrt(mean(Range)), 
+            Range_Lap_low = quantile(Range, c(.05)), 
+            Range_Lap_hi = quantile(Range, c(.95)),
+            Smoothness_Lap_MSE = sqrt(mean(Smoothness)), 
+            Smoothness_Lap_low = quantile(Smoothness, c(.05)),
+            Smoothness_Lap_hi = quantile(Smoothness, c(.95)), 
+            n = sum(!is.na(Range.VL))
+)
+fitable$n
+# table 2
+fitable[,c(1,2,5,8,11,14, 17,20)]
+
+# Scatter plot for sample parameter estimates, m=20
+scatter_df = my_df[my_df$m==20,]
+scatter_m20 = rbind(lap_df, scatter_df)
+require(ggplot2)
+true_pt = data.frame(list("Range" = rep(.05,3),
+                          "Smoothness"=rep(.5,3),
+                          "method" = unique(scatter_dats$variable)))
+ggplot(scatter_m20, aes(y = Range, x = Smoothness))+geom_point()+
+  facet_grid(.~ method)+theme_bw()+coord_trans(x="log2", y="log2")+
+  geom_point(data=true_pt[1:2], color="red", pch = 16, size = 2)+#geom_point(data=truncated_pt, pch=1)+
+  scale_x_continuous(name="Smoothness", breaks = c(1, 5 ,10, 20, 40)) +
+  scale_y_continuous(name="Range", breaks = c(1, 2,3,5)) 
+ggsave("param_est_scatter_m20.pdf", device = "pdf", width = 8, height =3)
+
+
